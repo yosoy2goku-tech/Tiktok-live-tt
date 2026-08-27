@@ -6,7 +6,16 @@ const express = require("express");
 const http = require("http");
 const path = require("path");
 const { Server } = require("socket.io");
-const { WebcastPushConnection } = require("tiktok-live-connector");
+const { TikTokLiveConnection, WebcastEvent, SignConfig } = require("tiktok-live-connector");
+
+// La librería necesita una llave GRATUITA de firma (sign) de Euler Stream
+// para poder conectarse a TikTok. Sin esto, siempre dirá "usuario no está en vivo"
+// aunque sí lo esté. Consigue la tuya gratis en https://www.eulerstream.com
+// y ponla aquí o como variable de entorno EULER_API_KEY en Render.
+const EULER_API_KEY = process.env.EULER_API_KEY || "";
+if (EULER_API_KEY) {
+  SignConfig.apiKey = EULER_API_KEY;
+}
 
 const app = express();
 const server = http.createServer(app);
@@ -34,7 +43,17 @@ io.on("connection", (socket) => {
       return;
     }
 
-    const tiktokConnection = new WebcastPushConnection(cleanUsername);
+    if (!EULER_API_KEY) {
+      socket.emit(
+        "connection-error",
+        "Falta configurar la llave EULER_API_KEY en el servidor. Consíguela gratis en eulerstream.com y agrégala en las variables de entorno de Render."
+      );
+      return;
+    }
+
+    const tiktokConnection = new TikTokLiveConnection(cleanUsername, {
+      signApiKey: EULER_API_KEY,
+    });
     activeConnections.set(socket.id, tiktokConnection);
 
     try {
@@ -46,49 +65,53 @@ io.on("connection", (socket) => {
       console.log(`Conectado al live de @${cleanUsername} (room ${state.roomId})`);
     } catch (err) {
       console.error("Error al conectar:", err?.message || err);
-      socket.emit(
-        "connection-error",
-        "No se pudo conectar. Verifica que el usuario esté EN VIVO ahora mismo y que el nombre esté bien escrito."
-      );
+      let msg = "No se pudo conectar. Verifica que el usuario esté EN VIVO ahora mismo y que el nombre esté bien escrito.";
+      if (err?.name === "UserOfflineError" || /offline|not.*live/i.test(err?.message || "")) {
+        msg = "TikTok dice que este usuario no está en vivo ahora mismo. Verifica el nombre de usuario (el de la URL, sin @) y que el live esté activo justo ahora.";
+      } else if (/sign|api.?key|401|403/i.test(err?.message || "")) {
+        msg = "Error de autenticación con el servicio de firma (Euler Stream). Revisa que tu EULER_API_KEY sea correcta y no haya expirado.";
+      }
+      socket.emit("connection-error", msg);
       activeConnections.delete(socket.id);
       return;
     }
 
     // Mensajes de chat
-    tiktokConnection.on("chat", (data) => {
+    tiktokConnection.on(WebcastEvent.CHAT, (data) => {
       socket.emit("chat-message", {
-        user: data.nickname || data.uniqueId || "Alguien",
+        user: data.user?.nickname || data.user?.uniqueId || "Alguien",
         comment: data.comment || "",
       });
     });
 
     // Regalos (opcional, se muestran pero no se leen para no saturar)
-    tiktokConnection.on("gift", (data) => {
-      if (data.giftType !== 1 || data.repeatEnd) {
+    tiktokConnection.on(WebcastEvent.GIFT, (data) => {
+      const giftType = data.giftDetails?.giftType;
+      if (giftType !== 1 || data.repeatEnd) {
         socket.emit("gift-message", {
-          user: data.nickname || data.uniqueId || "Alguien",
-          giftName: data.giftName || "un regalo",
+          user: data.user?.nickname || data.user?.uniqueId || "Alguien",
+          giftName: data.giftDetails?.giftName || "un regalo",
           repeatCount: data.repeatCount || 1,
         });
       }
     });
 
     // Likes (opcional)
-    tiktokConnection.on("like", (data) => {
+    tiktokConnection.on(WebcastEvent.LIKE, (data) => {
       socket.emit("like-message", {
-        user: data.nickname || data.uniqueId || "Alguien",
+        user: data.user?.nickname || data.user?.uniqueId || "Alguien",
         likeCount: data.likeCount || 1,
       });
     });
 
     // Nuevos espectadores entrando (opcional)
-    tiktokConnection.on("member", (data) => {
+    tiktokConnection.on(WebcastEvent.MEMBER, (data) => {
       socket.emit("member-message", {
-        user: data.nickname || data.uniqueId || "Alguien",
+        user: data.user?.nickname || data.user?.uniqueId || "Alguien",
       });
     });
 
-    tiktokConnection.on("streamEnd", () => {
+    tiktokConnection.on(WebcastEvent.STREAM_END, () => {
       socket.emit("stream-ended");
     });
 
@@ -118,4 +141,7 @@ io.on("connection", (socket) => {
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`Servidor corriendo en el puerto ${PORT}`);
+  if (!EULER_API_KEY) {
+    console.warn("ADVERTENCIA: no se configuró EULER_API_KEY. Las conexiones fallarán.");
+  }
 });
