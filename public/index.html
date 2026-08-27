@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lector de Chat en Vivo - TikTok</title>
+<style>
+  :root{
+    --bg:#0f0f12;
+    --panel:#17171c;
+    --panel2:#1e1e26;
+    --accent:#fe2c55;
+    --accent2:#25f4ee;
+    --text:#f2f2f2;
+    --muted:#9a9aa5;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    background:var(--bg);
+    color:var(--text);
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+  }
+  header{
+    width:100%;
+    padding:18px 16px 8px;
+    text-align:center;
+  }
+  header h1{
+    margin:0;
+    font-size:1.3rem;
+    background:linear-gradient(90deg,var(--accent2),var(--accent));
+    -webkit-background-clip:text;
+    background-clip:text;
+    color:transparent;
+  }
+  .status{
+    font-size:.85rem;
+    color:var(--muted);
+    margin-top:4px;
+  }
+  .status.live{color:#3ddc84;}
+  .status.error{color:var(--accent);}
+
+  .controls{
+    width:100%;
+    max-width:520px;
+    padding:12px 16px;
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+  }
+  input[type=text]{
+    flex:1;
+    min-width:150px;
+    padding:12px 14px;
+    border-radius:10px;
+    border:1px solid #2c2c35;
+    background:var(--panel2);
+    color:var(--text);
+    font-size:1rem;
+  }
+  button{
+    padding:12px 18px;
+    border-radius:10px;
+    border:none;
+    font-weight:600;
+    cursor:pointer;
+    font-size:.95rem;
+  }
+  #connectBtn{background:var(--accent);color:white;}
+  #disconnectBtn{background:#333;color:white;}
+  #disconnectBtn:disabled, #connectBtn:disabled{opacity:.4;cursor:not-allowed;}
+
+  .options{
+    width:100%;
+    max-width:520px;
+    padding:0 16px 12px;
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+    background:var(--panel);
+    border-radius:12px;
+    margin:0 16px 12px;
+    padding-top:12px;
+  }
+  .row{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:.9rem;color:var(--muted);}
+  .row label{flex:1;}
+  input[type=range]{flex:1;max-width:140px;}
+  select{
+    background:var(--panel2);
+    color:var(--text);
+    border:1px solid #2c2c35;
+    border-radius:8px;
+    padding:6px 8px;
+  }
+
+  #chatBox{
+    width:100%;
+    max-width:520px;
+    flex:1;
+    background:var(--panel);
+    margin:0 16px 16px;
+    border-radius:14px;
+    padding:10px;
+    overflow-y:auto;
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+    max-height:55vh;
+  }
+  .msg{
+    background:var(--panel2);
+    border-radius:10px;
+    padding:8px 12px;
+    font-size:.92rem;
+    line-height:1.35;
+    animation:fadeIn .25s ease;
+  }
+  .msg.system{
+    color:var(--muted);
+    font-style:italic;
+    background:transparent;
+    text-align:center;
+    font-size:.8rem;
+  }
+  .msg .user{
+    color:var(--accent2);
+    font-weight:700;
+    margin-right:6px;
+  }
+  .msg.gift .user{color:#ffd166;}
+  .msg.skipped{opacity:.45;}
+  .badge{
+    display:inline-block;
+    font-size:.7rem;
+    background:#2c2c35;
+    color:var(--muted);
+    border-radius:6px;
+    padding:1px 6px;
+    margin-left:6px;
+  }
+  @keyframes fadeIn{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
+
+  footer{
+    color:var(--muted);
+    font-size:.75rem;
+    padding-bottom:14px;
+    text-align:center;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🔊 Lector de Chat en Vivo</h1>
+  <div class="status" id="status">Sin conectar</div>
+</header>
+
+<div class="controls">
+  <input type="text" id="username" placeholder="usuario de TikTok (sin @)">
+  <button id="connectBtn">Conectar</button>
+  <button id="disconnectBtn" disabled>Detener</button>
+</div>
+
+<div class="options">
+  <div class="row">
+    <label for="voiceSelect">Voz</label>
+    <select id="voiceSelect"></select>
+  </div>
+  <div class="row">
+    <label for="rate">Velocidad de lectura</label>
+    <input type="range" id="rate" min="0.7" max="1.8" step="0.1" value="1.15">
+  </div>
+  <div class="row">
+    <label for="maxQueue">Máximo de mensajes en espera (evita atrasos)</label>
+    <input type="range" id="maxQueue" min="2" max="15" step="1" value="6">
+    <span id="maxQueueVal">6</span>
+  </div>
+  <div class="row">
+    <label for="minLen">Ignorar mensajes de menos de X caracteres</label>
+    <input type="range" id="minLen" min="0" max="10" step="1" value="1">
+    <span id="minLenVal">1</span>
+  </div>
+  <div class="row">
+    <label style="flex:none;">
+      <input type="checkbox" id="readUser" checked> Decir el nombre de usuario antes del mensaje
+    </label>
+  </div>
+</div>
+
+<div id="chatBox"></div>
+
+<footer>Los mensajes se leen en orden. Si se acumulan demasiados, se saltan los más viejos para no atrasarse.</footer>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+const socket = io();
+
+const statusEl = document.getElementById("status");
+const chatBox = document.getElementById("chatBox");
+const usernameInput = document.getElementById("username");
+const connectBtn = document.getElementById("connectBtn");
+const disconnectBtn = document.getElementById("disconnectBtn");
+const voiceSelect = document.getElementById("voiceSelect");
+const rateInput = document.getElementById("rate");
+const maxQueueInput = document.getElementById("maxQueue");
+const maxQueueVal = document.getElementById("maxQueueVal");
+const minLenInput = document.getElementById("minLen");
+const minLenVal = document.getElementById("minLenVal");
+const readUserCheckbox = document.getElementById("readUser");
+
+maxQueueInput.addEventListener("input", () => maxQueueVal.textContent = maxQueueInput.value);
+minLenInput.addEventListener("input", () => minLenVal.textContent = minLenInput.value);
+
+// ---------- Voces disponibles ----------
+function loadVoices(){
+  const voices = speechSynthesis.getVoices();
+  voiceSelect.innerHTML = "";
+  const spanishVoices = voices.filter(v => v.lang.toLowerCase().startsWith("es"));
+  const list = spanishVoices.length ? spanishVoices : voices;
+  list.forEach((v, i) => {
+    const opt = document.createElement("option");
+    opt.value = v.name;
+    opt.textContent = `${v.name} (${v.lang})`;
+    voiceSelect.appendChild(opt);
+  });
+}
+loadVoices();
+if (speechSynthesis.onvoiceschanged !== undefined) {
+  speechSynthesis.onvoiceschanged = loadVoices;
+}
+
+// ---------- Cola de lectura (evita atrasos) ----------
+let speechQueue = [];
+let speaking = false;
+
+function enqueueSpeech(text){
+  const maxQueue = parseInt(maxQueueInput.value, 10);
+
+  // Si la cola ya está muy llena, descartamos los mensajes más viejos
+  // para que el bot nunca quede leyendo cosas atrasadas.
+  while (speechQueue.length >= maxQueue) {
+    const dropped = speechQueue.shift();
+    if (dropped && dropped.el) {
+      dropped.el.classList.add("skipped");
+      dropped.el.querySelector(".text")?.insertAdjacentHTML(
+        "beforeend", ' <span class="badge">omitido</span>'
+      );
+    }
+  }
+
+  speechQueue.push({ text });
+  processQueue();
+}
+
+function processQueue(){
+  if (speaking || speechQueue.length === 0) return;
+  speaking = true;
+  const item = speechQueue.shift();
+
+  const utter = new SpeechSynthesisUtterance(item.text);
+  const voices = speechSynthesis.getVoices();
+  const chosen = voices.find(v => v.name === voiceSelect.value);
+  if (chosen) utter.voice = chosen;
+  utter.rate = parseFloat(rateInput.value);
+  utter.lang = chosen ? chosen.lang : "es-ES";
+
+  utter.onend = () => {
+    speaking = false;
+    processQueue();
+  };
+  utter.onerror = () => {
+    speaking = false;
+    processQueue();
+  };
+
+  speechSynthesis.speak(utter);
+}
+
+// ---------- Chat visual ----------
+function addMessage({ user, text, type }, speakEl){
+  const div = document.createElement("div");
+  div.className = "msg" + (type ? " " + type : "");
+  if (type === "system") {
+    div.textContent = text;
+  } else {
+    div.innerHTML = `<span class="user">${escapeHtml(user)}</span><span class="text">${escapeHtml(text)}</span>`;
+  }
+  chatBox.appendChild(div);
+  chatBox.scrollTop = chatBox.scrollHeight;
+
+  // Limitar mensajes en pantalla para que no se vuelva pesado
+  while (chatBox.children.length > 100) {
+    chatBox.removeChild(chatBox.firstChild);
+  }
+  return div;
+}
+
+function escapeHtml(str){
+  const d = document.createElement("div");
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+// ---------- Eventos del servidor ----------
+socket.on("connected", ({ username }) => {
+  statusEl.textContent = `🔴 EN VIVO — conectado a @${username}`;
+  statusEl.className = "status live";
+  connectBtn.disabled = true;
+  disconnectBtn.disabled = false;
+  addMessage({ text: `Conectado al live de @${username}` , type:"system"});
+});
+
+socket.on("connection-error", (msg) => {
+  statusEl.textContent = "❌ " + msg;
+  statusEl.className = "status error";
+  connectBtn.disabled = false;
+  disconnectBtn.disabled = true;
+});
+
+socket.on("stream-ended", () => {
+  statusEl.textContent = "El live terminó o se desconectó.";
+  statusEl.className = "status error";
+  connectBtn.disabled = false;
+  disconnectBtn.disabled = true;
+});
+
+socket.on("chat-message", ({ user, comment }) => {
+  const minLen = parseInt(minLenInput.value, 10);
+  const el = addMessage({ user, text: comment });
+
+  if (comment && comment.trim().length >= minLen) {
+    const textToRead = readUserCheckbox.checked
+      ? `${user} dice: ${comment}`
+      : comment;
+    enqueueSpeech(textToRead);
+    // Guardamos referencia por si se omite después
+    speechQueue[speechQueue.length - 1].el = el;
+  }
+});
+
+socket.on("gift-message", ({ user, giftName, repeatCount }) => {
+  addMessage({ user, text: `envió ${repeatCount}x ${giftName} 🎁`, type:"gift" });
+});
+
+socket.on("like-message", ({ user, likeCount }) => {
+  // No se leen para no saturar, solo se muestran ocasionalmente
+});
+
+socket.on("member-message", ({ user }) => {
+  // Opcional: podrías mostrar "X se unió" si quieres, se omite por defecto
+});
+
+// ---------- Botones ----------
+connectBtn.addEventListener("click", () => {
+  const username = usernameInput.value.trim();
+  if (!username) return;
+  chatBox.innerHTML = "";
+  speechQueue = [];
+  statusEl.textContent = "Conectando...";
+  statusEl.className = "status";
+  socket.emit("connect-to-live", username);
+});
+
+disconnectBtn.addEventListener("click", () => {
+  socket.emit("disconnect-live");
+  speechSynthesis.cancel();
+  speechQueue = [];
+  speaking = false;
+  statusEl.textContent = "Desconectado.";
+  statusEl.className = "status";
+  connectBtn.disabled = false;
+  disconnectBtn.disabled = true;
+});
+</script>
+</body>
+</html>
