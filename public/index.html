@@ -199,6 +199,7 @@ function finishSpeech(){
 
 function processQueue(){
   if(speaking||!queue.length) return;
+  if(typeof speechSynthesis !== "undefined") speechSynthesis.resume();
   const item=queue.shift();
   speaking=true;
   currentEl=item.el;
@@ -246,7 +247,7 @@ testBtn.addEventListener("click",()=>{
   markReading(currentEl,false);
   currentEl=null;
 
-  const u=new SpeechSynthesisUtterance("Prueba de voz. Alejandro dice: hola, la voz está funcionando correctamente.");
+  const u=new SpeechSynthesisUtterance("Prueba de voz. Usuario dice: hola, la voz está funcionando correctamente.");
   const v=voices.find(x=>x.name===voiceSelect.value);
   if(v){u.voice=v;u.lang=v.lang;}else u.lang="es-ES";
   u.rate=Number(rate.value); u.pitch=Number(pitch.value); u.volume=Number(volume.value);
@@ -337,6 +338,7 @@ function handleChatPayload(payload){
   lastChatTime = now;
 
   const el = addMessage({user,text});
+  console.log("💬 CHAT RECIBIDO:", user, text);
 
   const spoken = readUser.checked
     ? `${user} dice: ${text}`
