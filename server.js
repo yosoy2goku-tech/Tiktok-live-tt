@@ -81,23 +81,18 @@ io.on("connection", (socket) => {
       const user = data.user?.nickname || data.user?.uniqueId || "Alguien";
       const comment = data.comment || "";
       console.log(`💬 [CHAT] ${user}: ${comment}`);
+      if (!comment) {
+        // DIAGNÓSTICO TEMPORAL: si el comentario viene vacío, imprimimos
+        // todas las llaves del objeto y su JSON completo para encontrar
+        // dónde quedó el texto del mensaje en la nueva versión de TikTok.
+        console.log("🧩 Llaves del evento CHAT:", Object.keys(data));
+        try {
+          console.log("🧩 JSON completo:", JSON.stringify(data));
+        } catch (e) {
+          console.log("🧩 No se pudo serializar el evento completo:", e.message);
+        }
+      }
       socket.emit("chat-message", { user, comment });
-    });
-
-    // DIAGNÓSTICO: si el evento CHAT normal no se dispara mucho, esto revisa
-    // si TikTok igual está mandando el protobuf de chat con otro nombre.
-    tiktokConnection.on("rawData", (messageTypeName) => {
-      const name = String(messageTypeName || "");
-      if (/chat|comment|barrage/i.test(name)) {
-        console.log(`📦 Frame crudo tipo chat recibido: ${name}`);
-      }
-    });
-
-    tiktokConnection.on("decodedData", (eventName, decodedData) => {
-      const name = String(eventName || "");
-      if (/chat|comment|barrage/i.test(name)) {
-        console.log(`🔎 [DECODED:${name}]`, JSON.stringify(decodedData).slice(0, 300));
-      }
     });
 
     // Regalos (opcional, se muestran pero no se leen para no saturar)
