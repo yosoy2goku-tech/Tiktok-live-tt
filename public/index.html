@@ -41,7 +41,7 @@ footer{max-width:620px;padding:12px 20px 18px;text-align:center;color:var(--mute
 </head>
 <body>
 <header>
-<h1>🔊 Lector de Chat en Vivo</h1>
+<h1>🔊 TikTok Live Chat v3</h1><div style="font-size:.72rem;color:var(--muted);margin-top:3px">v3.0.0 • Chat + Bot + Voz</div>
 <div id="status" class="status">Sin conectar</div>
 </header>
 
@@ -84,12 +84,6 @@ footer{max-width:620px;padding:12px 20px 18px;text-align:center;color:var(--mute
 <span id="maxQueueVal">6</span>
 </div>
 
-<div class="row">
-<label for="minLen">Ignorar mensajes menores de</label>
-<input id="minLen" type="range" min="0" max="10" step="1" value="1">
-<span id="minLenVal">1</span>
-</div>
-
 <div class="check">
 <input id="readUser" type="checkbox" checked>
 <label for="readUser">Decir “nombre dice: mensaje”</label>
@@ -112,7 +106,7 @@ const $ = id => document.getElementById(id);
 const statusEl=$("status"), chatBox=$("chatBox"), usernameInput=$("username");
 const connectBtn=$("connectBtn"), disconnectBtn=$("disconnectBtn"), testBtn=$("testBtn");
 const voiceSelect=$("voiceSelect"), rate=$("rate"), pitch=$("pitch"), volume=$("volume");
-const maxQueue=$("maxQueue"), minLen=$("minLen"), readUser=$("readUser"), readBot=$("readBot");
+const maxQueue=$("maxQueue"), readUser=$("readUser"), readBot=$("readBot");
 
 let voices=[];
 let queue=[];
@@ -125,9 +119,8 @@ function updateLabels(){
   $("pitchVal").textContent=Number(pitch.value).toFixed(2);
   $("volumeVal").textContent=Math.round(Number(volume.value)*100)+"%";
   $("maxQueueVal").textContent=maxQueue.value;
-  $("minLenVal").textContent=minLen.value;
 }
-["rate","pitch","volume","maxQueue","minLen"].forEach(id=>$(id).addEventListener("input",updateLabels));
+["rate","pitch","volume","maxQueue"].forEach(id=>$(id).addEventListener("input",updateLabels));
 updateLabels();
 
 function loadVoices(){
@@ -286,29 +279,25 @@ socket.on("stream-ended",()=>{
    MENSAJES DE TIKTOK
    ========================= */
 
-const seenMessages = new Set();
-
 function normalizeIncoming(payload){
   if(payload == null) return null;
 
-  /* Algunos servidores mandan directamente un string */
   if(typeof payload === "string"){
     const text = payload.trim();
-    if(!text) return null;
-    return {user:"Usuario", text};
+    return text ? {user:"Usuario", text} : null;
   }
 
-  /* Otros mandan un objeto con nombres diferentes */
   if(typeof payload === "object"){
     const user =
-      payload.user ??
-      payload.username ??
+      payload.user?.uniqueId ??
+      payload.user?.nickname ??
       payload.uniqueId ??
+      payload.username ??
       payload.nickname ??
       payload.name ??
-      payload.sender ??
       payload.author?.uniqueId ??
       payload.author?.nickname ??
+      payload.sender ??
       "Usuario";
 
     const text =
@@ -322,121 +311,62 @@ function normalizeIncoming(payload){
       payload.data?.message ??
       payload.data?.text;
 
-    if(text !== undefined && text !== null && String(text).trim()){
-      return {
-        user:String(user),
-        text:String(text)
-      };
+    if(text != null && String(text).trim()){
+      return {user:String(user), text:String(text)};
     }
   }
 
   return null;
 }
 
-function messageKey(user,text){
-  return `${user}|${text}|${Date.now()}`;
-}
+let lastChatSignature = "";
+let lastChatTime = 0;
 
 function handleChatPayload(payload){
   const normalized = normalizeIncoming(payload);
-  if(!normalized) return false;
+  if(!normalized) return;
 
   const user = normalized.user;
-  const text = normalized.text;
+  const text = normalized.text.trim();
 
-  /*
-   * Evitar que onAny + el listener específico
-   * creen dos veces el mismo mensaje.
-   */
-  const now = Date.now();
+  /* Evita duplicados si llegan por chat-message y por onAny. */
   const signature = `${user}|${text}`;
-  const previous = window.__lastChatSignature;
-
-  if(previous && previous.signature === signature && now - previous.time < 1200){
-    return true;
-  }
-
-  window.__lastChatSignature = {signature,time:now};
+  const now = Date.now();
+  if(signature === lastChatSignature && now-lastChatTime < 1200) return;
+  lastChatSignature = signature;
+  lastChatTime = now;
 
   const el = addMessage({user,text});
 
-  if(text.trim().length >= Number(minLen.value)){
-    const spoken = readUser.checked
-      ? `${user} dice: ${text}`
-      : text;
+  const spoken = readUser.checked
+    ? `${user} dice: ${text}`
+    : text;
 
-    enqueueSpeech(spoken,el);
-  }
-
-  return true;
+  enqueueSpeech(spoken,el);
 }
 
-/*
- * Evento que usaba tu HTML original.
- */
-socket.on("chat-message",(payload)=>{
-  handleChatPayload(payload);
+/* Evento que debe emitir tu servidor. */
+socket.on("chat-message", handleChatPayload);
+
+/* Compatibilidad con otros nombres. */
+["chat","comment","comments","message","chatMessage","comment-message","commentMessage"].forEach(name=>{
+  socket.on(name,handleChatPayload);
 });
 
-/*
- * Compatibilidad con distintos nombres que puede usar
- * el server: chat, comment, message, chatMessage, etc.
- */
-[
-  "chat",
-  "comment",
-  "comments",
-  "message",
-  "chatMessage",
-  "comment-message",
-  "commentMessage",
-  "tiktok-chat",
-  "tiktok-comment"
-].forEach(eventName=>{
-  socket.on(eventName,(payload)=>{
-    handleChatPayload(payload);
-  });
-});
-
-/*
- * ESTA ES LA PARTE IMPORTANTE:
- * Socket.IO permite escuchar cualquier evento.
- * Así, aunque tu server use otro nombre, intentamos
- * reconocer automáticamente un objeto que contenga
- * usuario + comentario/mensaje.
- */
+/* Diagnóstico: muestra en consola cualquier evento no conocido. */
 socket.onAny((eventName,...args)=>{
   const ignored = new Set([
-    "connected",
-    "connection-error",
-    "stream-ended",
-    "gift-message",
-    "like-message",
-    "member-message",
-    "bot-message",
-    "bot-reading"
+    "connected","connection-error","stream-ended",
+    "gift-message","like-message","member-message",
+    "bot-message","bot-reading"
   ]);
 
-  if(ignored.has(eventName)) return;
-  if(!args.length) return;
-
-  const payload = args[0];
-
-  /*
-   * Primero intenta reconocer si realmente parece
-   * un mensaje de chat.
-   */
-  const normalized = normalizeIncoming(payload);
-
-  if(normalized){
-    console.log("[CHAT DETECTADO]", eventName, normalized);
-    handleChatPayload(payload);
-  }else{
-    console.log("[SOCKET EVENT]", eventName, payload);
+  if(!ignored.has(eventName)){
+    console.log("[SOCKET]",eventName,args[0]);
   }
 });
 
-/* LO QUE EL BOT ENVÍA. Acepta message o text. */
+/* LO QUE EL BOT ENVÍA */
 socket.on("bot-message",({user="BOT",message,text})=>{
   const answer=String(message??text??"");
   if(!answer) return;
@@ -452,7 +382,7 @@ socket.on("bot-message",({user="BOT",message,text})=>{
   }
 });
 
-/* Si tu servidor manda solo "bot-reading", también se ve. */
+/* LO QUE EL BOT ESTÁ LEYENDO/PROCESANDO */
 socket.on("bot-reading",({user="BOT",message,text})=>{
   const content=String(message??text??"");
   if(!content) return;
