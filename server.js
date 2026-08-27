@@ -78,19 +78,38 @@ io.on("connection", (socket) => {
 
     // Mensajes de chat
     tiktokConnection.on(WebcastEvent.CHAT, (data) => {
-      socket.emit("chat-message", {
-        user: data.user?.nickname || data.user?.uniqueId || "Alguien",
-        comment: data.comment || "",
-      });
+      const user = data.user?.nickname || data.user?.uniqueId || "Alguien";
+      const comment = data.comment || "";
+      console.log(`💬 [CHAT] ${user}: ${comment}`);
+      socket.emit("chat-message", { user, comment });
+    });
+
+    // DIAGNÓSTICO: si el evento CHAT normal no se dispara mucho, esto revisa
+    // si TikTok igual está mandando el protobuf de chat con otro nombre.
+    tiktokConnection.on("rawData", (messageTypeName) => {
+      const name = String(messageTypeName || "");
+      if (/chat|comment|barrage/i.test(name)) {
+        console.log(`📦 Frame crudo tipo chat recibido: ${name}`);
+      }
+    });
+
+    tiktokConnection.on("decodedData", (eventName, decodedData) => {
+      const name = String(eventName || "");
+      if (/chat|comment|barrage/i.test(name)) {
+        console.log(`🔎 [DECODED:${name}]`, JSON.stringify(decodedData).slice(0, 300));
+      }
     });
 
     // Regalos (opcional, se muestran pero no se leen para no saturar)
     tiktokConnection.on(WebcastEvent.GIFT, (data) => {
       const giftType = data.giftDetails?.giftType;
       if (giftType !== 1 || data.repeatEnd) {
+        const user = data.user?.nickname || data.user?.uniqueId || "Alguien";
+        const giftName = data.giftDetails?.giftName || "un regalo";
+        console.log(`🎁 [GIFT] ${user}: ${giftName}`);
         socket.emit("gift-message", {
-          user: data.user?.nickname || data.user?.uniqueId || "Alguien",
-          giftName: data.giftDetails?.giftName || "un regalo",
+          user,
+          giftName,
           repeatCount: data.repeatCount || 1,
         });
       }
@@ -106,9 +125,9 @@ io.on("connection", (socket) => {
 
     // Nuevos espectadores entrando (opcional)
     tiktokConnection.on(WebcastEvent.MEMBER, (data) => {
-      socket.emit("member-message", {
-        user: data.user?.nickname || data.user?.uniqueId || "Alguien",
-      });
+      const user = data.user?.nickname || data.user?.uniqueId || "Alguien";
+      console.log(`👋 [MEMBER] ${user} se unió`);
+      socket.emit("member-message", { user });
     });
 
     tiktokConnection.on(WebcastEvent.STREAM_END, () => {
