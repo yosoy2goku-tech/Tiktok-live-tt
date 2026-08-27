@@ -79,19 +79,9 @@ io.on("connection", (socket) => {
     // Mensajes de chat
     tiktokConnection.on(WebcastEvent.CHAT, (data) => {
       const user = data.user?.nickname || data.user?.uniqueId || "Alguien";
-      const comment = data.comment || "";
+      // TikTok renombró el campo del texto de "comment" a "content".
+      const comment = data.content || data.comment || "";
       console.log(`💬 [CHAT] ${user}: ${comment}`);
-      if (!comment) {
-        // DIAGNÓSTICO TEMPORAL: si el comentario viene vacío, imprimimos
-        // todas las llaves del objeto y su JSON completo para encontrar
-        // dónde quedó el texto del mensaje en la nueva versión de TikTok.
-        console.log("🧩 Llaves del evento CHAT:", Object.keys(data));
-        try {
-          console.log("🧩 JSON completo:", JSON.stringify(data));
-        } catch (e) {
-          console.log("🧩 No se pudo serializar el evento completo:", e.message);
-        }
-      }
       socket.emit("chat-message", { user, comment });
     });
 
