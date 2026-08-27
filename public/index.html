@@ -282,13 +282,157 @@ socket.on("stream-ended",()=>{
   addMessage({type:"system",text:"El LIVE terminó."});
 });
 
-/* MENSAJES DE TIKTOK */
-socket.on("chat-message",({user,comment})=>{
-  const text=String(comment||"");
-  const el=addMessage({user,text});
-  if(text.trim().length>=Number(minLen.value)){
-    const spoken=readUser.checked ? `${user} dice: ${text}` : text;
+/* =========================
+   MENSAJES DE TIKTOK
+   ========================= */
+
+const seenMessages = new Set();
+
+function normalizeIncoming(payload){
+  if(payload == null) return null;
+
+  /* Algunos servidores mandan directamente un string */
+  if(typeof payload === "string"){
+    const text = payload.trim();
+    if(!text) return null;
+    return {user:"Usuario", text};
+  }
+
+  /* Otros mandan un objeto con nombres diferentes */
+  if(typeof payload === "object"){
+    const user =
+      payload.user ??
+      payload.username ??
+      payload.uniqueId ??
+      payload.nickname ??
+      payload.name ??
+      payload.sender ??
+      payload.author?.uniqueId ??
+      payload.author?.nickname ??
+      "Usuario";
+
+    const text =
+      payload.comment ??
+      payload.message ??
+      payload.text ??
+      payload.content ??
+      payload.chatMessage ??
+      payload.msg ??
+      payload.data?.comment ??
+      payload.data?.message ??
+      payload.data?.text;
+
+    if(text !== undefined && text !== null && String(text).trim()){
+      return {
+        user:String(user),
+        text:String(text)
+      };
+    }
+  }
+
+  return null;
+}
+
+function messageKey(user,text){
+  return `${user}|${text}|${Date.now()}`;
+}
+
+function handleChatPayload(payload){
+  const normalized = normalizeIncoming(payload);
+  if(!normalized) return false;
+
+  const user = normalized.user;
+  const text = normalized.text;
+
+  /*
+   * Evitar que onAny + el listener específico
+   * creen dos veces el mismo mensaje.
+   */
+  const now = Date.now();
+  const signature = `${user}|${text}`;
+  const previous = window.__lastChatSignature;
+
+  if(previous && previous.signature === signature && now - previous.time < 1200){
+    return true;
+  }
+
+  window.__lastChatSignature = {signature,time:now};
+
+  const el = addMessage({user,text});
+
+  if(text.trim().length >= Number(minLen.value)){
+    const spoken = readUser.checked
+      ? `${user} dice: ${text}`
+      : text;
+
     enqueueSpeech(spoken,el);
+  }
+
+  return true;
+}
+
+/*
+ * Evento que usaba tu HTML original.
+ */
+socket.on("chat-message",(payload)=>{
+  handleChatPayload(payload);
+});
+
+/*
+ * Compatibilidad con distintos nombres que puede usar
+ * el server: chat, comment, message, chatMessage, etc.
+ */
+[
+  "chat",
+  "comment",
+  "comments",
+  "message",
+  "chatMessage",
+  "comment-message",
+  "commentMessage",
+  "tiktok-chat",
+  "tiktok-comment"
+].forEach(eventName=>{
+  socket.on(eventName,(payload)=>{
+    handleChatPayload(payload);
+  });
+});
+
+/*
+ * ESTA ES LA PARTE IMPORTANTE:
+ * Socket.IO permite escuchar cualquier evento.
+ * Así, aunque tu server use otro nombre, intentamos
+ * reconocer automáticamente un objeto que contenga
+ * usuario + comentario/mensaje.
+ */
+socket.onAny((eventName,...args)=>{
+  const ignored = new Set([
+    "connected",
+    "connection-error",
+    "stream-ended",
+    "gift-message",
+    "like-message",
+    "member-message",
+    "bot-message",
+    "bot-reading"
+  ]);
+
+  if(ignored.has(eventName)) return;
+  if(!args.length) return;
+
+  const payload = args[0];
+
+  /*
+   * Primero intenta reconocer si realmente parece
+   * un mensaje de chat.
+   */
+  const normalized = normalizeIncoming(payload);
+
+  if(normalized){
+    console.log("[CHAT DETECTADO]", eventName, normalized);
+    handleChatPayload(payload);
+  }else{
+    console.log("[SOCKET EVENT]", eventName, payload);
   }
 });
 
@@ -296,15 +440,28 @@ socket.on("chat-message",({user,comment})=>{
 socket.on("bot-message",({user="BOT",message,text})=>{
   const answer=String(message??text??"");
   if(!answer) return;
-  const el=addMessage({user,text:answer,type:"bot"});
-  if(readBot.checked) enqueueSpeech(`Bot dice: ${answer}`,el);
+
+  const el=addMessage({
+    user,
+    text:answer,
+    type:"bot"
+  });
+
+  if(readBot.checked){
+    enqueueSpeech(`Bot dice: ${answer}`,el);
+  }
 });
 
 /* Si tu servidor manda solo "bot-reading", también se ve. */
 socket.on("bot-reading",({user="BOT",message,text})=>{
   const content=String(message??text??"");
   if(!content) return;
-  addMessage({user,text:content,type:"bot"});
+
+  addMessage({
+    user,
+    text:content,
+    type:"bot"
+  });
 });
 
 socket.on("gift-message",({user,giftName,repeatCount})=>{
