@@ -231,7 +231,7 @@
   .overlay-banner{display:none;position:fixed;top:10px;right:10px;z-index:20;background:rgba(15,15,18,.85);padding:6px 10px;border-radius:999px;font-size:.72rem;color:#fff;backdrop-filter:blur(8px)}
   body.overlay-mode{background:transparent;align-items:stretch}
   body.overlay-mode header,body.overlay-mode .controls,body.overlay-mode .options,body.overlay-mode footer,body.overlay-mode .overlay-hide{display:none!important}
-  body.overlay-mode #chatBox{display:flex;max-width:none;width:100%;height:100vh;max-height:none;margin:0;padding:10px;background:transparent;overflow:hidden;justify-content:flex-end}
+  body.overlay-mode #chatBox{display:flex;max-width:none;width:100%;height:100vh;max-height:none;margin:0;padding:10px;background:transparent;overflow-y:auto;overflow-x:hidden;justify-content:flex-start}
   body.overlay-mode #chatBox .msg{background:rgba(20,20,26,.76);text-shadow:0 1px 2px #000;backdrop-filter:blur(4px)}
   .event-member{border-left-color:#7c5cff}.event-member .user{color:#b39cff}
   .event-like{border-left-color:#ff5b8a}.event-like .user{color:#ff8eb0}
@@ -320,6 +320,27 @@
   </div>
 
   <div class="row" style="flex-direction:column;align-items:stretch;gap:6px;">
+    <label style="flex:none;">🎵 Audio de fondo</label>
+    <input type="url" id="bgAudioUrl" placeholder="URL directa de MP3/OGG/WAV (opcional)" style="width:100%;box-sizing:border-box;">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <button id="bgAudioBtn">▶️ Reproducir fondo</button>
+      <button id="bgAudioStopBtn">⏹️ Detener</button>
+      <label style="flex:none;"><input type="checkbox" id="bgAudioLoop" checked> 🔁 Repetir</label>
+    </div>
+    <div class="row" style="margin:0;">
+      <label for="bgAudioVolume">Volumen fondo</label>
+      <input type="range" id="bgAudioVolume" min="0" max="1" step="0.05" value="0.25">
+      <span id="bgAudioVolumeVal">25%</span>
+    </div>
+    <div class="row" style="margin:0;">
+      <label for="duckVolume">Fondo mientras habla</label>
+      <input type="range" id="duckVolume" min="0" max="1" step="0.05" value="0.08">
+      <span id="duckVolumeVal">8%</span>
+    </div>
+    <small style="opacity:.7;">El fondo baja automáticamente mientras la voz lee y vuelve al volumen normal al terminar.</small>
+  </div>
+
+  <div class="row" style="flex-direction:column;align-items:stretch;gap:6px;">
     <label style="flex:none;">Modo de lectura</label>
     <div class="mode-switch">
       <button id="modeQueueBtn" class="active">📋 Cola</button>
@@ -389,6 +410,14 @@ const minLenInput = $("minLen");
 const minLenVal = $("minLenVal");
 const readUserCheckbox = $("readUser");
 const soundOnGiftCheckbox = $("soundOnGift");
+const bgAudioUrl = $("bgAudioUrl");
+const bgAudioBtn = $("bgAudioBtn");
+const bgAudioStopBtn = $("bgAudioStopBtn");
+const bgAudioLoop = $("bgAudioLoop");
+const bgAudioVolume = $("bgAudioVolume");
+const bgAudioVolumeVal = $("bgAudioVolumeVal");
+const duckVolume = $("duckVolume");
+const duckVolumeVal = $("duckVolumeVal");
 const modeQueueBtn = $("modeQueueBtn");
 const modeCooldownBtn = $("modeCooldownBtn");
 const queuePanel = $("queuePanel");
@@ -422,6 +451,10 @@ function savePrefs(){
       minLen: minLenInput.value,
       readUser: readUserCheckbox.checked,
       soundOnGift: soundOnGiftCheckbox.checked,
+      bgAudioUrl: bgAudioUrl.value.trim(),
+      bgAudioLoop: bgAudioLoop.checked,
+      bgAudioVolume: bgAudioVolume.value,
+      duckVolume: duckVolume.value,
       mode
     }));
   } catch(e) {}
@@ -447,6 +480,10 @@ function loadPrefs(){
     if (p.minLen) minLenInput.value = p.minLen;
     if (typeof p.readUser === "boolean") readUserCheckbox.checked = p.readUser;
     if (typeof p.soundOnGift === "boolean") soundOnGiftCheckbox.checked = p.soundOnGift;
+    if (typeof p.bgAudioUrl === "string") bgAudioUrl.value = p.bgAudioUrl;
+    if (typeof p.bgAudioLoop === "boolean") bgAudioLoop.checked = p.bgAudioLoop;
+    if (p.bgAudioVolume != null) bgAudioVolume.value = p.bgAudioVolume;
+    if (p.duckVolume != null) duckVolume.value = p.duckVolume;
     if (p.mode) setMode(p.mode, true);
     if (p.voice) voiceSelect.dataset.preferred = p.voice;
     updateLabels();
@@ -461,11 +498,13 @@ function updateLabels(){
   pitchVal.textContent = Number(pitchInput.value).toFixed(1);
   volumeVal.textContent = Math.round(Number(volumeInput.value) * 100) + "%";
   maxLikeBurstVal.textContent = maxLikeBurstInput.value;
+  bgAudioVolumeVal.textContent = Math.round(Number(bgAudioVolume.value) * 100) + "%";
+  duckVolumeVal.textContent = Math.round(Number(duckVolume.value) * 100) + "%";
 }
-[rateInput, pitchInput, volumeInput, maxQueueInput, cooldownInput, minLenInput, maxLikeBurstInput].forEach(el =>
+[rateInput, pitchInput, volumeInput, maxQueueInput, cooldownInput, minLenInput, maxLikeBurstInput, bgAudioVolume, duckVolume].forEach(el =>
   el.addEventListener("input", () => { updateLabels(); savePrefs(); })
 );
-[readUserCheckbox, soundOnGiftCheckbox, showMembers, readMembers, showLikes, readLikes, showGifts, readGifts].forEach(el =>
+[readUserCheckbox, soundOnGiftCheckbox, showMembers, readMembers, showLikes, readLikes, showGifts, readGifts, bgAudioLoop].forEach(el =>
   el.addEventListener("change", savePrefs)
 );
 updateLabels();
@@ -509,6 +548,49 @@ if (speechSynthesis.onvoiceschanged !== undefined) {
   speechSynthesis.onvoiceschanged = loadVoices;
 }
 voiceSelect.addEventListener("change", savePrefs);
+
+let backgroundAudio = null;
+let backgroundAudioBaseVolume = 0.25;
+let backgroundAudioDuckedVolume = 0.08;
+
+function setupBackgroundAudio(url) {
+  const clean = String(url || '').trim();
+  if (!clean) return null;
+  if (backgroundAudio && backgroundAudio.src === clean) {
+    backgroundAudio.loop = bgAudioLoop.checked;
+    backgroundAudio.volume = Number(bgAudioVolume.value);
+    return backgroundAudio;
+  }
+  if (backgroundAudio) { try { backgroundAudio.pause(); } catch(e) {} }
+  const a = new Audio(clean);
+  a.loop = bgAudioLoop.checked;
+  a.preload = 'auto';
+  a.volume = Number(bgAudioVolume.value);
+  a.addEventListener('error', () => { console.warn('No se pudo cargar el audio de fondo. Usa una URL directa a un archivo de audio.'); });
+  backgroundAudio = a;
+  return a;
+}
+function playBackgroundAudio() {
+  const a = setupBackgroundAudio(bgAudioUrl.value);
+  if (!a) { alert('Pon primero una URL directa a un MP3, OGG o WAV.'); return; }
+  a.loop = bgAudioLoop.checked;
+  a.volume = Number(bgAudioVolume.value);
+  a.play().catch(() => alert('El navegador bloqueó el audio. Pulsa de nuevo el botón para darle permiso de reproducción.'));
+}
+function stopBackgroundAudio() {
+  if (!backgroundAudio) return;
+  try { backgroundAudio.pause(); backgroundAudio.currentTime = 0; } catch(e) {}
+}
+function setBackgroundDucked(isSpeaking) {
+  if (!backgroundAudio) return;
+  backgroundAudioBaseVolume = Number(bgAudioVolume.value);
+  backgroundAudioDuckedVolume = Number(duckVolume.value);
+  backgroundAudio.volume = isSpeaking ? backgroundAudioDuckedVolume : backgroundAudioBaseVolume;
+}
+bgAudioBtn.addEventListener('click', () => { playBackgroundAudio(); savePrefs(); });
+bgAudioStopBtn.addEventListener('click', stopBackgroundAudio);
+bgAudioUrl.addEventListener('change', savePrefs);
+bgAudioLoop.addEventListener('change', () => { if (backgroundAudio) backgroundAudio.loop = bgAudioLoop.checked; savePrefs(); });
 
 let audioCtx = null;
 function playChime(){
@@ -590,6 +672,7 @@ function startCooldown(){
 
 function speak(text, el, onDone){
   speaking = true;
+  setBackgroundDucked(true);
   currentEl = el;
   if (el) el.classList.add("reading");
   speakingIndicator.classList.add("active");
@@ -605,6 +688,7 @@ function speak(text, el, onDone){
 
   const finish = () => {
     speaking = false;
+    setBackgroundDucked(false);
     if (el) el.classList.remove("reading");
     speakingIndicator.classList.remove("active");
     currentEl = null;
@@ -642,7 +726,9 @@ function addMessage({ user, text, type }){
     div.innerHTML = `<span class="user">${escapeHtml(user)}</span><span class="text">${escapeHtml(text)}</span>`;
   }
   chatBox.appendChild(div);
-  chatBox.scrollTop = chatBox.scrollHeight;
+  requestAnimationFrame(() => {
+    div.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  });
   while (chatBox.children.length > 150) {
     chatBox.removeChild(chatBox.firstChild);
   }
@@ -666,6 +752,7 @@ function buildSpeechForEvent(type, user, value) {
 
 function testVoice(){
   speechSynthesis.cancel();
+  setBackgroundDucked(true);
   const chosen = speechSynthesis.getVoices().find(v => v.name === voiceSelect.value);
   const utter = new SpeechSynthesisUtterance('Prueba de voz. Esta es la configuración actual.');
   if (chosen) utter.voice = chosen;
@@ -674,7 +761,7 @@ function testVoice(){
   utter.pitch = parseFloat(pitchInput.value);
   utter.volume = parseFloat(volumeInput.value);
   speakingIndicator.classList.add('active');
-  utter.onend = utter.onerror = () => speakingIndicator.classList.remove('active');
+  utter.onend = utter.onerror = () => { setBackgroundDucked(false); speakingIndicator.classList.remove('active'); };
   speechSynthesis.speak(utter);
 }
 testVoiceBtn.addEventListener('click', testVoice);
@@ -687,9 +774,12 @@ function enableOverlayMode(){
 function makeOverlayLink(){
   const u = usernameInput.value.trim().replace(/^@/,'');
   if (!u) { alert('Escribe primero el usuario de TikTok.'); return; }
-  const url = new URL(window.location.href);
-  url.searchParams.set('overlay','1');
+  const url = new URL('/overlay.html', window.location.origin);
   url.searchParams.set('user',u);
+  if (bgAudioUrl.value.trim()) url.searchParams.set('bgAudio', bgAudioUrl.value.trim());
+  url.searchParams.set('bgVol', bgAudioVolume.value);
+  url.searchParams.set('bgLoop', bgAudioLoop.checked ? '1' : '0');
+  url.searchParams.set('duck', duckVolume.value);
   overlayUrl.textContent = url.toString();
   overlayUrl.style.display='block';
   try { navigator.clipboard?.writeText(url.toString()); } catch(e) {}
@@ -697,7 +787,12 @@ function makeOverlayLink(){
 overlayBtn.addEventListener('click', makeOverlayLink);
 
 const params = new URLSearchParams(location.search);
-if (params.get('overlay') === '1') {
+if (params.get('bgAudio')) { bgAudioUrl.value = params.get('bgAudio'); }
+if (params.get('bgVol')) bgAudioVolume.value = params.get('bgVol');
+if (params.get('duck')) duckVolume.value = params.get('duck');
+if (params.get('bgLoop')) bgAudioLoop.checked = params.get('bgLoop') !== '0';
+updateLabels();
+if (params.get('overlay') === '1' || location.pathname.endsWith('/overlay.html')) {
   enableOverlayMode();
   const overlayUser = (params.get('user') || '').replace(/^@/,'').trim();
   if (overlayUser) {
