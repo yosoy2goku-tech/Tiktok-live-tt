@@ -1,17 +1,18 @@
 {
-  "name": "tiktok-live-tts",
-  "version": "1.0.0",
-  "description": "Lee en voz alta el chat de un live de TikTok",
-  "main": "server.js",
+  "name": "tiktok-live-chat-v3",
+  "version": "3.0.1",
+  "private": true,
+  "description": "TikTok Live Chat con comentarios y lectura por voz",
+  "main": "server_chat_fix_v3.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server_chat_fix_v3.js"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20"
   },
   "dependencies": {
-    "express": "^4.19.2",
-    "socket.io": "^4.7.5",
-    "tiktok-live-connector": "^2.0.0"
+    "express": "^5.1.0",
+    "socket.io": "^4.8.1",
+    "tiktok-live-connector": "^2.4.4"
   }
 }

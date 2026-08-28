@@ -1,0 +1,24 @@
+TikTok Live Chat v3 - CORREGIDO
+
+REQUISITOS
+- Node.js 20 o superior.
+
+INSTALACIÓN
+1. Abre una terminal en esta carpeta.
+2. Ejecuta: npm install
+3. Ejecuta: npm start
+4. Abre: http://localhost:3000/index_v3.html
+
+CAMBIO IMPORTANTE
+El servidor escucha WebcastEvent.CHAT y además inspecciona ControlEvent.DECODED_DATA.
+Esto permite detectar mensajes si TikTok entrega el protobuf de chat pero el mapeo
+normal de WebcastEvent.CHAT no se dispara.
+
+DIAGNÓSTICO EN CONSOLA
+- 💬 [CHAT] = llegó por el evento normal.
+- 💬 [DECODED:...] = llegó por el fallback de datos decodificados.
+- 📦 TikTok envió frame de chat = TikTok mandó un frame cuyo tipo parece de chat.
+- 👋 = miembro.
+
+Si ves 👋 pero nunca ves 📦/💬 aunque alguien escriba, el problema está en los
+frames que entrega TikTok/el transporte y no en la voz ni en Socket.IO.
