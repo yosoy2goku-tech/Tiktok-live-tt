@@ -1,18 +1,9 @@
 {
-  "name": "tiktok-live-chat-v3",
-  "version": "3.0.1",
-  "private": true,
-  "description": "TikTok Live Chat con comentarios y lectura por voz",
-  "main": "server_chat_fix_v3.js",
-  "scripts": {
-    "start": "node server_chat_fix_v3.js"
-  },
-  "engines": {
-    "node": ">=20"
-  },
-  "dependencies": {
-    "express": "^5.1.0",
-    "socket.io": "^4.8.1",
-    "tiktok-live-connector": "^2.4.4"
-  }
+  "name":"tiktok-live-chat-v3",
+  "version":"3.0.2",
+  "private":true,
+  "main":"server_chat_fix_v3.js",
+  "scripts":{"start":"node server_chat_fix_v3.js"},
+  "engines":{"node":">=20"},
+  "dependencies":{"express":"^5.1.0","socket.io":"^4.8.1","tiktok-live-connector":"^2.4.4"}
 }

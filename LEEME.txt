@@ -1,0 +1,22 @@
+TikTok Live Chat v3 - completo + overlay + audio de fondo
+
+Instalación:
+  npm install
+  npm start
+
+Página principal:
+  http://localhost:3000
+
+Overlay:
+  En la página principal escribe el usuario y pulsa "Generar overlay".
+  El enlace abre /overlay.html y no la interfaz principal.
+
+Audio de fondo:
+  Puedes poner una URL directa a un archivo MP3/OGG/WAV.
+  Ajusta volumen y volumen mientras habla la voz.
+  El enlace del overlay conserva la URL y sus ajustes.
+
+Nota:
+  Los navegadores normales pueden bloquear reproducción automática de audio.
+  En OBS/Browser Source normalmente se puede permitir audio; si el navegador bloquea
+  el autoplay, pulsa "Reproducir fondo" en la página principal.
